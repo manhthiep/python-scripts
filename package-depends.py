@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# Original: http://tech-foo.blogspot.com/2013/01/visualising-ubuntu-package-repository.html
  
 import sys
 from re import match, split
@@ -10,10 +11,10 @@ package_info = {}
 package_cache = []
 
 class PackageNode:
-    depends = {}
-
+    
     def __init__(self, pkg_name):
         self.name = pkg_name
+        self.version = ''
         self.depends = {}
 
     def getDepends(self):
@@ -61,6 +62,8 @@ def get_node_for_package(pkg_name):
         # add node properties:
         pkg_info = get_package_info(pkg_name)
         if pkg_info:
+            version = pkg_info.get('Version', '')
+            pkg_node.version = version
             depends = pkg_info.get('Depends', '')
             depends = get_sanitised_depends_list(depends)
             for dep in depends:
@@ -86,7 +89,7 @@ def print_depends_tree(pkg_name, indent=1, indent_str="  "):
             dep_out = dep_out + indent_str
             indent_count = indent_count + 1
         dep_out = dep_out + dep_name
-        print dep_out + depends.count
+        print dep_out
         if dep_name not in package_cache:
             print_depends_tree(dep_name, indent+1, indent_str)
 
