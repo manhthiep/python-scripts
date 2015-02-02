@@ -116,8 +116,11 @@ def print_depends(pkg_name):
     """Print depends list"""
 
     depends = get_depends(pkg_name)
-    for dep_name in sorted(depends):
-        print "  " + dep_name
+    if len(depends) > 0:
+        for dep_name in sorted(depends):
+            print "  " + dep_name
+    else:
+        print "  No depends"
 
 if __name__ == '__main__':
 
@@ -127,7 +130,7 @@ if __name__ == '__main__':
 
     packages = sys.argv[1:]
     # packages = [ 'ubuntu-desktop' ]
-    print "Packages: "  + ', '.join(packages)
+    # print "Packages: "  + ', '.join(packages)
 
     n = 0
     for pkg_name in packages:
