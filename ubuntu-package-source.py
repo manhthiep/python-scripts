@@ -17,7 +17,7 @@ package_cache = []
 
 DEBUG = False
 VERBOSE = False
-NO_DEPENDS = False
+WITH_DEPENDS = False
 
 class PackageNode:
 
@@ -49,7 +49,7 @@ def download_source_package(source_pkg_name, source_pkg_version=''):
         else:
             result = check_call(['apt-get','source',source_pkg_name + '=' + source_pkg_version])
     except:
-        print "Unable to download source for package: '%s'" % source_pkg_name
+        print "ERROR: Unable to download source for package: '%s'" % source_pkg_name
         os.chdir(current_dir)
         return 1
 
@@ -65,7 +65,7 @@ def get_package_info(pkg_name):
         try:
             yaml_stream = check_output(['apt-cache','show',pkg_name])
         except:
-            print "Unable to find info for package: '%s'" % pkg_name
+            print "ERROR: Unable to find info for package: '%s'" % pkg_name
             package_info[pkg_name] = {}
             return {}
         d = Deb822(yaml_stream)
@@ -92,7 +92,7 @@ def get_node_for_package(pkg_name):
         pkg_info = get_package_info(pkg_name)
         if pkg_info:
             if VERBOSE:
-                print "Get package info: " + pkg_name
+                print "VERBOSE: Get package info: " + pkg_name
             pkg_node = PackageNode(pkg_name)
             package_nodes[pkg_name] = pkg_node
             # add node properties:
@@ -102,18 +102,18 @@ def get_node_for_package(pkg_name):
                 # source_pkg_name == pkg_name
                 pkg_node.source = pkg_name
                 if VERBOSE:
-                    print "  Getting source package: '%s' for '%s'" % (pkg_name, pkg_name)
+                    print "VERBOSE: Getting source package: '%s' for '%s'" % (pkg_name, pkg_name)
             else:
                 # source_pkg_name != pkg_name
                 pkg_node.source = match('(\S*)', source.strip()).groups()[0]
                 if VERBOSE:
-                    print "  Getting source package: '%s' instead of '%s'" % (pkg_node.source, pkg_name)
-            if not NO_DEPENDS:
+                    print "VERBOSE: Getting source package: '%s' instead of '%s'" % (pkg_node.source, pkg_name)
+            if WITH_DEPENDS:
                 depends = pkg_info.get('Depends', '')
                 depends = get_sanitised_depends_list(depends)
                 depends = sorted(depends)
                 if DEBUG:
-                    print "  Depends: " + ', '.join(depends)
+                    print "DEBUG: Depends: " + ', '.join(depends)
                 for dep in depends:
                     dep_node = get_node_for_package(dep)
                     pkg_node.addDepend(dep, dep_node)
@@ -150,7 +150,7 @@ def get_source_for_package(pkg_name):
     if pkg_node:
         source_pkg_name = pkg_node.source
     else:
-        print "Skip invalid package name: '%s'" % pkg_name
+        print "WARNING: Skip invalid package name: '%s'" % pkg_name
         source_pkg_name = ''
 
     return source_pkg_name
@@ -172,6 +172,8 @@ def get_source_for_package_and_depends(pkg_name):
 
     return source_pkgs
 
+# http://stackoverflow.com/questions/3041986/python-command-line-yes-no-input
+# http://code.activestate.com/recipes/577058/
 def ask_yes_no(question, default="yes"):
     """Ask a yes/no question via raw_input() and return their answer.
 
@@ -210,9 +212,9 @@ def signal_handler(signal, frame):
 def usage(script_name):
     print "Usage: %s [OPTIONS] PACKAGE_NAMES" % script_name
     print "Options:"
-    print "  --no-depends"
-    print "  --debug"
-    print "  --verbose"
+    print "    --with-depends"
+    print "    --debug"
+    print "    --verbose"
     print ""
 
 if __name__ == '__main__':
@@ -220,28 +222,28 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
 
     if len(sys.argv) == 1:
-        print "Missing arguments"
+        print "ERROR: Missing arguments"
         usage(sys.argv[0])
         sys.exit(1)
 
     try:
-        opts, packages = getopt.getopt(sys.argv[1:], '', ['no-depends', 'debug', 'verbose'])
+        opts, packages = getopt.getopt(sys.argv[1:], '', ['with-depends', 'debug', 'verbose'])
     except getopt.GetoptError as err:
         print str(err) # will print something like "option -a not recognized"
         usage(sys.argv[0])
         sys.exit(2)
 
     if len(packages) == 0:
-        print "Missing package names"
+        print "ERROR: Missing package names"
         usage(sys.argv[0])
         sys.exit(3)
 
     DEBUG = False
     VERBOSE = False
-    NO_DEPENDS = False
+    WITH_DEPENDS = False
     for o, a in opts:
-        if o == "--no-depends":
-            NO_DEPENDS = True
+        if o == "--with-depends":
+            WITH_DEPENDS = True
         elif o == "--debug":
             DEBUG = True
             VERBOSE = True
@@ -256,13 +258,16 @@ if __name__ == '__main__':
     for pkg_name in packages:
         print "Package: " + pkg_name
 
-        if NO_DEPENDS:
-            source_pkgs = [get_source_for_package(pkg_name)]
-        else:
+        if WITH_DEPENDS:
             source_pkgs = get_source_for_package_and_depends(pkg_name)
+        else:
+            source_pkgs = [get_source_for_package(pkg_name)]
         if len(source_pkgs) > 0:
             print ""
-            print "Packages to download (%d packages):" % len(source_pkgs)
+            if len(source_pkgs) > 1:
+                print "Source packages to download (%d packages):" % len(source_pkgs)
+            else:
+                print "Source packages to download (1 package):"
             print ', '.join(source_pkgs)
             print ""
             answer = ask_yes_no("Continue to download ?")
@@ -277,7 +282,7 @@ if __name__ == '__main__':
                     if result != 0:
                         sys.exit(result)
             else:
-                print "Skip downloading source(s) for package '%s'" % pkg_name
+                print "WARNING: Skip downloading source package(s) for '%s'" % pkg_name
 
         n += 1
         if n % 10 == 0:
