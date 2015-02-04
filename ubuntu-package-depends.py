@@ -17,6 +17,8 @@ package_cache = []
 DEBUG = False
 VERBOSE = False
 VIEW_AS_TREE = False
+VIEW_GRAPHVIZ = False
+VIEW_DEPTH = 1
 
 class PackageNode:
     
@@ -80,27 +82,6 @@ def get_node_for_package(pkg_name):
     else:
         return package_nodes.get(pkg_name)
 
-def print_depends_tree(pkg_name, indent=1, indent_str="| ", branch_str="|-"):
-    """Print depends tree"""
-
-    global package_cache
-    package_cache.append(pkg_name)
-    pkg_node = get_node_for_package(pkg_name)
-
-    depends = pkg_node.getDepends()
-    for dep_name in sorted(depends.keys()):
-        dep_node = depends[dep_name]
-        dep_out = ""
-        indent_count = 0
-        while (indent_count < (indent - 1)):
-            dep_out = dep_out + indent_str
-            indent_count = indent_count + 1
-        dep_out = dep_out + branch_str
-        dep_out = dep_out + dep_name
-        print dep_out
-        if dep_name not in package_cache:
-            print_depends_tree(dep_name, indent+1, indent_str, branch_str)
-
 def get_depends(pkg_name):
     """Get depends list of package and its depends and so on."""
 
@@ -130,10 +111,73 @@ def print_depends(pkg_name):
     else:
         print "  No depends"
 
+def print_depends_tree(pkg_name, indent=1, indent_str="| ", branch_str="|-", depth=1):
+    """Print depends tree"""
+
+    global package_cache
+    package_cache.append(pkg_name)
+    pkg_node = get_node_for_package(pkg_name)
+
+    depends = pkg_node.getDepends()
+    for dep_name in sorted(depends.keys()):
+        dep_node = depends[dep_name]
+        dep_out = ""
+        indent_count = 0
+        while (indent_count < (indent - 1)):
+            dep_out = dep_out + indent_str
+            indent_count = indent_count + 1
+        dep_out = dep_out + branch_str
+        dep_out = dep_out + dep_name
+        print dep_out
+        if dep_name not in package_cache:
+            if depth < VIEW_DEPTH or VIEW_DEPTH == 0:
+                if DEBUG:
+                    print "%d - %s" % (depth, dep_name)
+                print_depends_tree(dep_name, indent+1, indent_str, branch_str, depth+1)
+
+def print_depends_grapviz_dot(pkg_name, depth=1):
+    """Print depends to DOT-language string"""
+
+    global package_cache
+    package_cache.append(pkg_name)
+    pkg_node = get_node_for_package(pkg_name)
+
+    graph_str = ""
+    depends = pkg_node.getDepends()
+    for dep_name in sorted(depends.keys()):
+        dep_node = depends[dep_name]
+        graph_str = graph_str + "\"%s\" -> \"%s\";\n" % (pkg_name, dep_name)
+        if dep_name not in package_cache:
+            if depth < VIEW_DEPTH or VIEW_DEPTH == 0:
+                if DEBUG:
+                    print "%d - %s" % (depth, dep_name)
+                graph_str = graph_str + print_depends_grapviz_dot(dep_name, depth+1)
+
+    return graph_str
+
+def write_graphviz_dot(pkg_name):
+    """Write .dot file"""
+
+    graph_str = "digraph \"%s\" {\n" % pkg_name
+    graph_str = graph_str + "rankdir=LR;\n"
+    graph_str = graph_str + "node [shape=box]; \"%s\";\n" % pkg_name
+    graph_str = graph_str + "node [shape=ellipse];\n"
+    graph_str = graph_str + print_depends_grapviz_dot(pkg_name)
+    graph_str = graph_str + "}"
+
+    output_file = "%s.dot" % pkg_name
+    f = open(output_file, 'w')
+    f.write(graph_str)
+    f.close()
+
+    print "Depends graph saved to %s." % output_file
+
 def usage(script_name):
     print "Usage: %s [OPTIONS] PACKAGE_NAMES" % script_name
     print "Options:"
     print "    --tree"
+    print "    --graphviz"
+    print "    --depth (default: 1)"
     print "    --debug"
     print "    --verbose"
     print ""
@@ -146,7 +190,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     try:
-        opts, packages = getopt.getopt(sys.argv[1:], '', ['tree', 'debug', 'verbose'])
+        opts, packages = getopt.getopt(sys.argv[1:], '', ['tree', 'graphviz', 'depth=', 'debug', 'verbose'])
     except getopt.GetoptError as err:
         print str(err) # will print something like "option -a not recognized"
         usage(sys.argv[0])
@@ -160,9 +204,15 @@ if __name__ == '__main__':
     DEBUG = False
     VERBOSE = False
     VIEW_AS_TREE = False
+    VIEW_GRAPHVIZ = False
+    VIEW_DEPTH = 1
     for o, a in opts:
         if o == "--tree":
             VIEW_AS_TREE = True
+        elif o == "--graphviz":
+            VIEW_GRAPHVIZ = True
+        elif o == "--depth":
+            VIEW_DEPTH = int(a)
         elif o == "--debug":
             DEBUG = True
             VERBOSE = True
@@ -178,6 +228,8 @@ if __name__ == '__main__':
         print "Package: " + pkg_name
         if VIEW_AS_TREE:
             print_depends_tree(pkg_name)
+        elif VIEW_GRAPHVIZ:
+            write_graphviz_dot(pkg_name)
         else:
             print_depends(pkg_name)
         n += 1
